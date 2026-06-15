@@ -3,20 +3,31 @@ import { jwt } from "@elysiajs/jwt";
 import { loginUser, logoutUser } from "../services/auth.services";
 import { authMiddleware } from "../middlewares/auth.middleware";
 
-const attempts = new Map<string, { count: number; resetAt: number }>();
-const MAX = 5;
+const MAX_ATTEMPTS = 5;
 const WINDOW_MS = 60_000;
 
-function checkRateLimit(ip: string): boolean {
+type RateLimitEntry = { count: number; resetAt: number };
+const loginAttempts = new Map<string, RateLimitEntry>();
+
+function checkRateLimit(ip: string, username: string): boolean {
+  const key = `${ip}:${username}`;
   const now = Date.now();
-  const rec = attempts.get(ip);
+  const rec = loginAttempts.get(key);
+
   if (!rec || now > rec.resetAt) {
-    attempts.set(ip, { count: 1, resetAt: now + WINDOW_MS });
+    loginAttempts.set(key, { count: 1, resetAt: now + WINDOW_MS });
     return true;
   }
-  if (rec.count >= MAX) return false;
+  if (rec.count >= MAX_ATTEMPTS) return false;
   rec.count++;
   return true;
+}
+
+function pruneExpiredAttempts(): void {
+  const now = Date.now();
+  for (const [key, rec] of loginAttempts) {
+    if (now > rec.resetAt) loginAttempts.delete(key);
+  }
 }
 
 export const authRoutes = new Elysia()
@@ -24,12 +35,14 @@ export const authRoutes = new Elysia()
   .post(
     "/login",
     async ({ body, jwt, status, request }) => {
+      pruneExpiredAttempts();
+
       const ip =
         request.headers.get("x-forwarded-for") ??
         request.headers.get("x-real-ip") ??
         "unknown";
 
-      if (!checkRateLimit(ip)) {
+      if (!checkRateLimit(ip, body.username)) {
         return status(429, { error: "Too many requests. Please try again later." });
       }
 
@@ -53,8 +66,9 @@ export const authRoutes = new Elysia()
   )
   .use(authMiddleware)
   .post("/logout", async ({ sessionId, status }) => {
+    if (!sessionId) return status(400, { error: "Invalid session." });
     try {
-      await logoutUser(sessionId!);
+      await logoutUser(sessionId);
       return { data: "OK" };
     } catch (e) {
       return status(500, { error: "Internal Server Error" });

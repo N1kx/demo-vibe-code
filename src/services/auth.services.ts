@@ -20,7 +20,7 @@ export async function loginUser(
   input: LoginInput
 ): Promise<{ sessionId: string; userId: number; username: string }> {
   const [user] = await db
-    .select()
+    .select({ id: users.id, username: users.username, password: users.password })
     .from(users)
     .where(eq(users.username, input.username))
     .limit(1);
@@ -31,6 +31,9 @@ export async function loginUser(
   if (!valid) throw new Error(AUTH_ERROR);
 
   const sessionId = crypto.randomUUID();
+
+  // Delete existing sessions for this user before creating a new one
+  await db.delete(userSessions).where(eq(userSessions.userId, user.id));
 
   await db.insert(userSessions).values({
     token: sessionId,
@@ -48,23 +51,16 @@ export async function logoutUser(sessionId: string): Promise<void> {
 export async function getSessionUser(
   sessionId: string
 ): Promise<SessionUser | null> {
-  const [session] = await db
-    .select()
-    .from(userSessions)
-    .where(eq(userSessions.token, sessionId))
-    .limit(1);
-
-  if (!session || !session.userId) return null;
-
-  const [user] = await db
+  const [result] = await db
     .select({
       id: users.id,
       username: users.username,
       full_name: users.fullName,
     })
-    .from(users)
-    .where(eq(users.id, session.userId))
+    .from(userSessions)
+    .innerJoin(users, eq(userSessions.userId, users.id))
+    .where(eq(userSessions.token, sessionId))
     .limit(1);
 
-  return user ?? null;
+  return result ?? null;
 }
