@@ -7,7 +7,11 @@ const MAX_ATTEMPTS = 5;
 const WINDOW_MS = 60_000;
 
 type RateLimitEntry = { count: number; resetAt: number };
-const loginAttempts = new Map<string, RateLimitEntry>();
+export const loginAttempts = new Map<string, RateLimitEntry>();
+
+export function resetLoginAttempts(): void {
+  loginAttempts.clear();
+}
 
 function checkRateLimit(ip: string, username: string): boolean {
   const key = `${ip}:${username}`;
