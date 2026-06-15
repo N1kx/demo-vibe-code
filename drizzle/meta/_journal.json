@@ -8,6 +8,13 @@
       "when": 1781463643886,
       "tag": "0000_lumpy_natasha_romanoff",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1781505923781,
+      "tag": "0001_demonic_hellcat",
+      "breakpoints": true
     }
   ]
 }
